@@ -1,0 +1,94 @@
+const User = require('../models/user');
+const auth =require('../routes/authRoutes');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
+// const uuid = require('uuid');(if you wnat to do email verification you can use this module)
+
+// set routes for login and registration
+
+// Signup/register Route
+module.exports.signup_post = async (req, res) => {
+    try {
+      const { username, email, password, age } = req.body;
+      const user = new User({ username, email, password, age });
+     const saveUser = await user.save();
+      res.status(201).json(saveUser);
+      console.log(req.body);
+    } catch (error) {
+      console.error('Error during registration:', error);
+      res.status(400).json({ error: error.message });
+
+    }
+  };
+
+
+// login route 
+
+module.exports.login_post = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+  // access token
+    const accessToken = jwt.sign({ userId: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+  //  refresh token
+    const refreshToken = jwt.sign({ userId: user.id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    // send tokens
+    res.json({ accessToken, refreshToken });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+
+
+//  refresh token / renew token 
+
+module.exports.renew_token_post = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    // Verify the refresh token
+    jwt.verify(refreshToken, 'fine', (err, decoded) => {
+      if (err) {
+        return res.status(401).json({ error: 'Invalid refresh token' });
+      }
+
+// generate access token again or renew access token 
+      const accessToken = jwt.sign({ userId: decoded.userId, username: decoded.username }, process.env.JWT_SECRET, { expiresIn: '15m' });
+
+      res.json({ accessToken });
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+}
+
+
+
+// logout
+
+module.exports.logout_get = async (req, res)=>{
+  try {
+    
+    const token = req.header('Authorization').split(' ')[1];
+    res.status(200).json({ message: 'Logout successful' });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    res.status(500).json({ error: 'Logout failed' });  
+  }
+    
+}
